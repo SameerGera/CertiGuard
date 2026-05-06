@@ -1,0 +1,42 @@
+[project]
+name = "certiguard-backend"
+version = "0.1.0"
+description = "Backend services for CertiGuard - AI document auditor for government procurement"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Proprietary"}
+
+dependencies = [
+    "fastapi>=0.108.0",
+    "uvicorn>=0.25.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "sqlalchemy>=2.0.0",
+    "asyncpg>=0.29.0",
+    "python-dotenv>=1.0.0",
+    "reportlab>=4.0.0",
+    "httpx>=0.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.black]
+line-length = 88
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
