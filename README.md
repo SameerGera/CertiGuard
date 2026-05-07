@@ -23,7 +23,6 @@ Before you begin, ensure you have the following installed:
 | **Python** | 3.10+ | Backend runtime |
 | **Node.js** | 18+ | Frontend build tools |
 | **npm** | 9+ | Frontend package manager |
-| **Git** | 2.30+ | Version control |
 
 ### Optional (for production)
 
@@ -330,6 +329,3 @@ lsof -i :8000
 kill -9 <PID>
 ```
 
-## License
-
-Proprietary - All rights reserved.
