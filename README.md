@@ -1,73 +1,176 @@
-# CertiGuard Backend
+# CertiGuard
 
-Backend services for CertiGuard — an AI-powered document auditor for government procurement (CRPF).
+AI-powered document verification system for government procurement tenders. CertiGuard automates bidder eligibility checks by processing tender documents and evidence PDFs through an intelligent pipeline, flagging uncertain cases for human review, and generating audit-ready reports.
 
-This repository contains the verification, verdict, and audit modules.
+---
 
-## Features
+## What It Does
 
-- **Verification Engine** — Identity binding, temporal validity, anti-tampering, cross-document consistency
-- **Verdict Engine** — Yellow flag protocol and verdict matrix
-- **Audit Trail** — Immutable audit records with Merkle tree hashing
-- **Pipeline Orchestration** — Async processing of multiple bidders
+CertiGuard evaluates bidder eligibility in three stages:
 
-## Tech Stack
+1. Upload tender and bidder documents
+2. AI pipeline extracts entities and verifies criteria
+3. Review flagged cases, override verdicts, sign off, and export reports
 
-| Technology | Purpose |
-|-----------|--------|
-| Python 3.12+ | Core language |
-| Pydantic | Data validation |
-| PostgreSQL | Database |
-| FastAPI | API framework |
-| ReportLab | PDF generation |
+---
 
-## Installation
+## Prerequisites
 
-```bash
-git clone https://github.com/your-org/certiguard-backend.git
-cd certiguard-backend
-pip install -e .
+- Python 3.10 or higher
+- Node.js 18 or higher
+- npm 9 or higher
+
+Optional:
+- PostgreSQL 15+ (for persistent storage)
+- OpenAI API key (for enhanced LLM extraction)
+
+---
+
+## Setup
+
+Clone the repository:
+
+```
+git clone https://github.com/SameerGera/CertiGuard.git
+cd CertiGuard
 ```
 
-## Quick Start
+Install backend dependencies:
 
-```bash
-# Run the API server
-uvicorn src.pipeline.orchestrator:app --reload
-
-# Or run the verification pipeline directly
-python -c "from src.pipeline import orchestrator; orchestrator.run('tender.pdf', 'bidders/')"
 ```
+pip install -r requirements.txt
+```
+
+Install frontend dependencies:
+
+```
+cd frontend
+npm install
+cd ..
+```
+
+Create environment file:
+
+```
+cp backend/.env.example backend/.env
+```
+
+Edit `backend/.env` if needed:
+
+```
+DATABASE_URL=postgresql://user:pass@localhost:5432/certiguard
+LOG_LEVEL=INFO
+MAX_FILE_SIZE_MB=100
+```
+
+---
+
+## How to Run
+
+Start backend:
+
+```
+python main.py
+```
+
+Backend runs at: http://localhost:8000
+
+API documentation at: http://localhost:8000/docs
+
+Start frontend (in a new terminal):
+
+```
+cd frontend
+npm run dev
+```
+
+Frontend runs at: http://localhost:3000
+
+---
+
+## How to Use
+
+### 1. View Tenders
+
+Open http://localhost:3000 to see the dashboard with sample tenders T001, T002, T003.
+
+### 2. Upload Documents
+
+Navigate to "Upload New Tender" to upload:
+- Tender PDF document
+- Bidder evidence PDFs (GST, PAN, experience letters, turnover)
+
+### 3. Process and Review
+
+Click "Review" on any tender to see bidder verdicts:
+- Green: ELIGIBLE
+- Red: NOT_ELIGIBLE
+- Amber: NEEDS_REVIEW (flagged for human check)
+
+### 4. Override (if needed)
+
+Click on a flagged bidder, then "Override Verdict" to:
+- Enter officer credentials
+- Provide rationale
+- Submit human decision
+
+### 5. Sign Off and Export
+
+Once all cases are resolved:
+- Click "Sign Off" with officer details
+- Generate PDF, JSON, or Excel report
+
+---
 
 ## Project Structure
 
 ```
-src/
-├── verification/      # Phase 4: Deterministic checks
-│   ├── rule_engine.py
-│   ├── identity_binding.py
-│   ├── temporal_validity.py
-│   ├── authority_verifier.py
-│   ├── tamper_detector.py
-│   └── consistency_checker.py
-├── verdict/        # Phase 5: Decision logic
-│   ├── yellow_flag.py
-│   └── verdict_engine.py
-├── audit/         # Phase 6: Reporting
-│   ├── record_generator.py
-│   ├── merkle.py
-│   ├── report_generator.py
-│   └── exporters.py
-└── pipeline/      # Orchestration
-    ├── orchestrator.py
-    └── parallel_runner.py
+CertiGuard/
+├── main.py                 API server entry point
+├── requirements.txt         Python dependencies
+├── backend/
+│   └── src/
+│       ├── pipeline/       ML processing pipeline
+│       ├── verification/   Entity validation rules
+│       ├── verdict/        Yellow flag triggers
+│       └── audit/          Report generation
+└── frontend/
+    └── src/
+        ├── pages/          Dashboard, ReviewQueue, Upload
+        ├── components/     UI components
+        └── hooks/          API integration
 ```
 
-## API Endpoints
+---
 
-| Method | Endpoint | Description |
-|--------|---------|------------|
-| `POST` | `/verify/evaluate` | Run verification on bidder evidence |
-| `POST` | `/override/apply` | Apply human override |
-| `GET` | `/audit/records` | Get audit records |
-| `GET` | `/report/generate` | Generate evaluation report |
+## Test Tenders
+
+| ID | Name |
+|----|------|
+| T001 | CRPF Uniform Supply 2026 |
+| T002 | CRPF Security Services 2026 |
+| T003 | CRPF IT Equipment 2026 |
+
+Sample data in: `backend/test_data/`
+
+---
+
+## Troubleshooting
+
+Module not found:
+
+```
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/backend"
+```
+
+Port already in use (8000):
+
+```
+netstat -ano | findstr :8000
+taskkill /PID <PID> /F
+```
+
+Frontend API errors: Ensure backend is running before starting frontend.
+
+---
+
