@@ -63,6 +63,11 @@ pip install -r requirements.txt
 cd backend
 pip install -e ".[dev]"
 cd ..
+
+# Or install backend package with dev dependencies
+cd backend
+pip install -e ".[dev]"
+cd ..
 ```
 
 ### 4. Set Up Environment Variables
