@@ -15,7 +15,7 @@ This repository contains the verification, verdict, and audit modules.
 
 | Technology | Purpose |
 |-----------|--------|
-| Python 3.10+ | Core language |
+| Python 3.12+ | Core language |
 | Pydantic | Data validation |
 | PostgreSQL | Database |
 | FastAPI | API framework |
