@@ -186,10 +186,10 @@ class YellowFlagGenerator:
         days_since_expiry: int
     ) -> Optional[YellowFlag]:
         """Trigger: Certificate expired."""
-        if days_since_expiry > 0:
+        if days_since_expiry >= 0:
             return YellowFlag(
                 trigger=YellowFlagTrigger.EXPIRED_CERTIFICATE,
-                reason=f"Certificate expired {days_since_expiry} days ago",
+                reason=f"Certificate expired {days_since_expiry} days ago" if days_since_expiry > 0 else "Certificate expired today",
                 affected_entity="certificate_expiry",
                 confidence_delta=0.5,
                 severity="high"
@@ -216,13 +216,21 @@ class YellowFlagGenerator:
         match_score: float
     ) -> Optional[YellowFlag]:
         """Trigger: Name mismatch but partial match."""
-        if match_score < 0.80 and match_score > 0.5:
+        if match_score < 0.80 and match_score >= 0.5:
             return YellowFlag(
                 trigger=YellowFlagTrigger.NAME_MISMATCH,
                 reason=f"Name match score {match_score:.2f} suggests partial match",
                 affected_entity="company_name",
                 confidence_delta=0.2,
                 severity="medium"
+            )
+        elif match_score < 0.5 and match_score > 0:
+            return YellowFlag(
+                trigger=YellowFlagTrigger.NAME_MISMATCH,
+                reason=f"Name match score {match_score:.2f} too low - likely different entity",
+                affected_entity="company_name",
+                confidence_delta=0.4,
+                severity="high"
             )
         return None
     
@@ -280,9 +288,9 @@ class YellowFlagGenerator:
             if flag:
                 flags.append(flag)
         
-        if " handwritten_confidence" in verification_results:
+        if "handwritten_confidence" in verification_results:
             flag = self.check_handwritten(
-                verification_results[" handwritten_confidence"]
+                verification_results["handwritten_confidence"]
             )
             if flag:
                 flags.append(flag)

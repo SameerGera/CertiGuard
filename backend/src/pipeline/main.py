@@ -119,8 +119,8 @@ class EntityExtractor:
                     normalized_value=str(value),
                     confidence=0.85
                 ))
-            except:
-                pass
+            except (ValueError, TypeError) as e:
+                print(f"[EntityExtractor] Failed to parse amount '{match}': {e}")
 
         # Extract years of experience
         for match in self.YEARS_PATTERN.findall(text):
@@ -202,7 +202,7 @@ class CertiGuardPipeline:
                 else:
                     overall = 'ELIGIBLE'
 
-                avg_conf = sum(r['ai_confidence'] for r in criterion_results) / len(criterion_results) if criterion_results else 0
+                avg_conf = sum((r['ai_confidence'] for r in criterion_results), 0) / len(criterion_results) if criterion_results else 0
 
                 bidders_results.append({
                     'bidder_id': bidder_id,
@@ -245,7 +245,7 @@ class CertiGuardPipeline:
                 else:
                     overall = 'ELIGIBLE'
 
-                avg_conf = sum(r['ai_confidence'] for r in criterion_results) / len(criterion_results) if criterion_results else 0
+                avg_conf = sum((r['ai_confidence'] for r in criterion_results), 0) / len(criterion_results) if criterion_results else 0
 
                 bidders_results.append({
                     'bidder_id': bidder_id,
@@ -548,16 +548,28 @@ class CertiGuardPipeline:
 
             if criterion_id == 'C003':  # Turnover
                 turnover_entities = [e for e in entities if e.entity_type == 'turnover']
+                is_mandatory = criterion_nature == 'MANDATORY'
                 
                 if not turnover_entities:
-                    verdict = 'ELIGIBLE'
-                    confidence = 0.6
-                    reason = 'No turnover documents found - optional criterion'
+                    if is_mandatory:
+                        verdict = 'NEEDS_REVIEW'
+                        confidence = 0.5
+                        reason = 'No turnover documents found - mandatory criterion requires verification'
+                        yellow_flags = [{
+                            'trigger_type': 'MISSING_MANDATORY_FIELD',
+                            'reason': 'Turnover documents not found or unclear',
+                            'affected_entity': 'turnover',
+                            'confidence_delta': -0.3
+                        }]
+                    else:
+                        verdict = 'ELIGIBLE'
+                        confidence = 0.6
+                        reason = 'No turnover documents found - optional criterion'
                     checks.append({
                         'check_name': 'Turnover Validation',
-                        'passed': True,
-                        'detail': 'Not provided (optional)',
-                        'confidence': 0.6
+                        'passed': not is_mandatory,
+                        'detail': 'Not provided' + (' (mandatory)' if is_mandatory else ' (optional)'),
+                        'confidence': 0.5 if is_mandatory else 0.6
                     })
                 else:
                     # Pick the turnover with highest value
@@ -567,8 +579,8 @@ class CertiGuardPipeline:
                             val = int(te.normalized_value.replace(",", "") or 0)
                             if val > 1000:
                                 valid_turnovers.append((val, te))
-                        except:
-                            pass
+                        except (ValueError, TypeError, AttributeError) as e:
+                            print(f"[Pipeline] Failed to parse turnover value: {e}")
                     
                     if not valid_turnovers:
                         verdict = 'NEEDS_REVIEW'
