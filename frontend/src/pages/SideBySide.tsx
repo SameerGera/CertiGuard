@@ -17,6 +17,7 @@ export default function SideBySide({ tenderId }: SideBySideProps) {
   const [showOverride, setShowOverride] = useState(false)
   const [loading, setLoading] = useState(true)
   const [currentTenderId] = useState(tenderId || 'T001')
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     if (!bidderId) return
@@ -30,7 +31,7 @@ export default function SideBySide({ tenderId }: SideBySideProps) {
       })
       .catch(err => console.error('Failed to fetch bidder:', err))
       .finally(() => setLoading(false))
-  }, [bidderId, currentTenderId])
+  }, [bidderId, currentTenderId, refreshKey])
 
   if (!bidderId) {
     return <div className="text-center py-12 text-slate-500">Select a bidder from the queue</div>
@@ -102,7 +103,8 @@ export default function SideBySide({ tenderId }: SideBySideProps) {
           onClose={() => setShowOverride(false)}
           onSubmit={() => {
             setShowOverride(false)
-            navigate('/queue')
+            setRefreshKey(k => k + 1)
+            navigate('/queue', { state: { refresh: true } })
           }}
         />
       )}

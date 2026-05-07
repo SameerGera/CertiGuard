@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import type { VerdictOutput } from '../types/api'
 import { getReviewQueue } from '../hooks/useApi'
 import BidderCard from '../components/BidderCard'
@@ -11,10 +11,12 @@ interface ReviewQueueProps {
 
 export default function ReviewQueue({ tenderId }: ReviewQueueProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const [data, setData] = useState<VerdictOutput | null>(null)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'ALL' | 'NEEDS_REVIEW' | 'ELIGIBLE' | 'NOT_ELIGIBLE'>('ALL')
   const [search, setSearch] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     if (!tenderId) {
@@ -29,7 +31,15 @@ export default function ReviewQueue({ tenderId }: ReviewQueueProps) {
         setData(null)
       })
       .finally(() => setLoading(false))
-  }, [tenderId])
+  }, [tenderId, refreshKey])
+
+  // Refresh when returning from override
+  useEffect(() => {
+    if (location.state?.refresh) {
+      setRefreshKey(k => k + 1)
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location])
 
   const filteredBidders = data?.bidders.filter((b) => {
     const matchesFilter = filter === 'ALL' || b.overall_verdict === filter

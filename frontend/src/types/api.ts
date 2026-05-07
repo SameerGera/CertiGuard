@@ -70,6 +70,13 @@ export interface CriterionResult {
   yellow_flags: YellowFlag[] | null
   evidence_refs: string[]
   reason: string
+  override?: {
+    officer_id: string
+    officer_name: string
+    rationale: string
+    signature: string
+    timestamp: string
+  }
 }
 
 export interface BidderResult {

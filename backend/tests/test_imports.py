@@ -20,7 +20,7 @@ def test_imports():
         from src.audit.record_generator import record_generator
         from src.audit.report_generator import report_generator
         from src.audit.exporters import exporters
-        from src.pipeline.main import PipelineOrchestrator
+        from src.pipeline.main import CertiGuardPipeline
         from src.pipeline.parallel_runner import parallel_runner
         print("All imports OK")
         return True

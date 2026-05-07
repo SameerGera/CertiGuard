@@ -39,10 +39,10 @@ def test_merkle():
 
 
 def test_pipeline():
-    from src.pipeline.main import PipelineOrchestrator, PipelineConfig
+    from src.pipeline.main import CertiGuardPipeline, PipelineConfig
     config = PipelineConfig("T1", "t.pdf", "b/", "o/")
-    orch = PipelineOrchestrator(config)
-    print(f"Orchestrator: {orch}")
+    pipeline = CertiGuardPipeline(config)
+    print(f"Pipeline: {pipeline}")
     print("OK")
 
 
