@@ -17,6 +17,14 @@ class EntityExtractor:
         "amount": r"(?:₹|Rs\.?|INR)?\s*(\d+(?:,\d+)*(?:\.\d+)?)",
     }
 
+    _CERTIFICATION_PATTERNS = {
+        "iso_9001": r"ISO\s*9001[:\-]?\s*(\d{4})?",
+        "iso_14001": r"ISO\s*14001[:\-]?\s*(\d{4})?",
+        "iso_45001": r"ISO\s*45001[:\-]?\s*(\d{4})?",
+        "iso_27001": r"ISO\s*27001[:\-]?\s*(\d{4})?",
+        "iso_certification": r"(?:ISO\s*\d{4,5}|International\s*Organization\s*for\s*Standardization)",
+    }
+
     def __init__(self, use_llm: bool = False):
         self.use_llm = use_llm
 
@@ -58,6 +66,18 @@ class EntityExtractor:
                 extracted = self._extract_date(text)
                 if extracted:
                     extracted.entity_type = entity_type
+                    entities.append(extracted)
+            elif entity_type in ["experience_years", "years_of_experience", "experience"]:
+                extracted = self._extract_experience_years(text)
+                if extracted:
+                    entities.append(extracted)
+            elif entity_type in ["certification", "iso_cert", "iso_certificate", "quality_cert"]:
+                extracted = self._extract_certifications(text)
+                if extracted:
+                    entities.extend(extracted)
+            elif entity_type in ["address", "registered_address"]:
+                extracted = self._extract_address(text)
+                if extracted:
                     entities.append(extracted)
 
         return entities
@@ -161,3 +181,114 @@ class EntityExtractor:
             return f"{int(value):,}"
         except Exception:
             return value
+
+    def _extract_experience_years(self, text: str) -> Optional[ExtractedEntity]:
+        patterns = [
+            r"(\d+)\s*(?:\+\s*)?years?\s*(?:of\s*)?(?:experience|exp)",
+            r"experience\s*[:\-]?\s*(\d+)\s*years?",
+            r"(\d+)\s*yrs?\s*(?:of\s*)?(?:experience|exp)",
+            r"since\s*(\d{4})\s*-\s*(?:present|current)",
+            r"working\s*(?:since|from)\s*(\d{4})",
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                try:
+                    if match.lastindex == 1:
+                        years = int(match.group(1))
+                        if years > 50:
+                            current_year = 2026
+                            years = current_year - years
+                        return ExtractedEntity(
+                            entity_type="experience_years",
+                            value=f"{years} years",
+                            normalized_value=str(years),
+                            confidence=0.85
+                        )
+                except (ValueError, AttributeError):
+                    pass
+        return None
+
+    def _extract_certifications(self, text: str) -> list[ExtractedEntity]:
+        entities = []
+        
+        for cert_type, pattern in self._CERTIFICATION_PATTERNS.items():
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            if matches:
+                year = matches[0] if matches[0] else "Valid"
+                entities.append(ExtractedEntity(
+                    entity_type="certification",
+                    value=f"{cert_type.replace('_', ' ').upper()} - {year}",
+                    normalized_value=year if year != "Valid" else "Active",
+                    confidence=0.90
+                ))
+        
+        if not entities:
+            iso_matches = re.findall(r"ISO\s*\d+", text, re.IGNORECASE)
+            if iso_matches:
+                entities.append(ExtractedEntity(
+                    entity_type="certification",
+                    value="ISO Certification Found",
+                    normalized_value="Active",
+                    confidence=0.80
+                ))
+        
+        return entities
+
+    def _extract_address(self, text: str) -> Optional[ExtractedEntity]:
+        patterns = [
+            r"[A-Z][a-zA-Z\s]+,\s*[A-Z]{2}\s*\d{6}",
+            r"(?:address|registered\s*office)[:\s]*([^,\n]+(?:,\s*[^,\n]+){0,3})",
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return ExtractedEntity(
+                    entity_type="address",
+                    value=match.group(0).strip(),
+                    confidence=0.75
+                )
+        return None
+
+    def validate_entity(self, entity: ExtractedEntity) -> tuple[bool, str]:
+        if entity.entity_type == "gst_number":
+            if len(entity.value) == 15:
+                return True, "Valid GST format"
+            return False, "Invalid GST format"
+        
+        if entity.entity_type == "pan_number":
+            if len(entity.value) == 10 and entity.value[:5].isupper() and entity.value[5:9].isdigit():
+                return True, "Valid PAN format"
+            return False, "Invalid PAN format"
+        
+        if entity.entity_type == "email":
+            if re.match(r"[^@]+@[^@]+\.[^@]+", entity.value):
+                return True, "Valid email format"
+            return False, "Invalid email format"
+        
+        if entity.entity_type == "phone":
+            if len(re.sub(r"\D", "", entity.value)) >= 10:
+                return True, "Valid phone format"
+            return False, "Invalid phone format"
+        
+        if entity.entity_type == "experience_years":
+            try:
+                years = int(entity.normalized_value)
+                if 0 < years <= 50:
+                    return True, f"Valid: {years} years"
+                return False, f"Years out of reasonable range"
+            except (ValueError, TypeError):
+                return False, "Invalid experience value"
+        
+        if entity.entity_type == "turnover":
+            try:
+                amount = int(entity.normalized_value.replace(",", ""))
+                if amount > 0:
+                    return True, f"Valid: Rs. {amount:,}"
+                return False, "Turnover must be positive"
+            except (ValueError, TypeError):
+                return False, "Invalid turnover value"
+        
+        return True, "Valid"

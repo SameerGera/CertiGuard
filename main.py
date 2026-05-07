@@ -94,6 +94,59 @@ def get_tenders():
     return {"tenders": updated_tenders}
 
 
+@app.get("/api/v1/tenders/{tender_id}")
+def get_tender_detail(tender_id: str):
+    """Get tender details including extracted criteria."""
+    # Find tender info
+    tender_info = next((t for t in TENDERS_LIST if t["tender_id"] == tender_id), None)
+    if not tender_info:
+        raise HTTPException(status_code=404, detail="Tender not found")
+    
+    # Run pipeline to get criteria if already processed
+    if tender_id in PROCESSED_RESULTS:
+        result = PROCESSED_RESULTS[tender_id]
+        return {
+            "tender_id": tender_id,
+            "tender_name": result.get("tender_name", tender_info["tender_name"]),
+            "submission_deadline": result.get("submission_deadline", tender_info.get("submission_deadline", "")),
+            "status": tender_info["status"],
+            "bidder_count": tender_info["bidder_count"],
+            "criteria": result.get("criteria", []),
+            "criteria_extracted": True
+        }
+    
+    # Parse tender document to extract criteria
+    base_dir = Path(__file__).parent / "backend" / "test_data"
+    tender_path = str(base_dir / "tender" / f"tender_{tender_id.split('T')[1]}.pdf")
+    
+    if os.path.exists(tender_path):
+        try:
+            from backend.src.pipeline.main import run_pipeline
+            result = run_pipeline(tender_id, tender_path, str(base_dir / "bidders"), str(base_dir / "output"))
+            PROCESSED_RESULTS[tender_id] = result
+            return {
+                "tender_id": tender_id,
+                "tender_name": result.get("tender_name", tender_info["tender_name"]),
+                "submission_deadline": result.get("submission_deadline", tender_info.get("submission_deadline", "")),
+                "status": tender_info["status"],
+                "bidder_count": tender_info["bidder_count"],
+                "criteria": result.get("criteria", []),
+                "criteria_extracted": True
+            }
+        except Exception as e:
+            print(f"Error parsing tender: {e}")
+    
+    return {
+        "tender_id": tender_id,
+        "tender_name": tender_info["tender_name"],
+        "submission_deadline": tender_info.get("submission_deadline", ""),
+        "status": tender_info["status"],
+        "bidder_count": tender_info["bidder_count"],
+        "criteria": [],
+        "criteria_extracted": False
+    }
+
+
 @app.get("/api/v1/review/queue")
 def get_review_queue(tender_id: str = Query(...)):
     # Check if we have real pipeline results
@@ -164,6 +217,15 @@ def process_tender(
             "tender_id": tender_id,
             "error": str(e)
         }
+
+
+@app.get("/api/v1/process/tender")
+def process_tender_get(
+    tender_id: str = Query(...),
+    tender_name: str = Query(...)
+):
+    """Process a tender using GET request."""
+    return process_tender(tender_id, tender_name, None)
 
 
 def create_sample_tender(tender_id: str, tender_name: str, filepath: str):

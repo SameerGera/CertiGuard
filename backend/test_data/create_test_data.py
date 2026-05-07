@@ -163,28 +163,61 @@ def create_bidder_turnover_pdf(bidder_id, company_name, amount_lakhs):
     print(f"Created: {filepath}")
 
 
+def create_bidder_certification_pdf(bidder_id, company_name, cert_type, cert_number, year):
+    """Create an ISO certification PDF for a bidder."""
+    filepath = os.path.join(os.path.dirname(__file__), "bidders", f"{bidder_id}_cert.pdf")
+    c = canvas.Canvas(filepath, pagesize=A4)
+    width, height = A4
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(1*inch, height - 1*inch, "ISO CERTIFICATION")
+
+    c.setFont("Helvetica", 11)
+    y = height - 1.5*inch
+
+    lines = [
+        f"Company Name: {company_name}",
+        f"Certification: {cert_type}",
+        f"Certificate Number: {cert_number}",
+        f"Year of Certification: {year}",
+        "Valid Until: 2027-12-31",
+        "Certifying Body: Bureau Veritas",
+        "Scope: Quality Management System",
+    ]
+
+    for line in lines:
+        c.drawString(1*inch, y, line)
+        y -= 0.25*inch
+
+    c.save()
+    print(f"Created: {filepath}")
+
+
 if __name__ == "__main__":
     print("Creating test data...")
 
     # Create tender
     create_tender_pdf()
 
-    # Create bidder 1 - ELIGIBLE (good GST, good experience, good turnover)
+    # Create bidder 1 - ELIGIBLE (good GST, good experience, good turnover, has ISO)
     create_bidder_gst_pdf("B001", "Alpha Textiles Ltd", "27AAACM1234A1Z5", "Active")
     create_bidder_pan_pdf("B001", "Alpha Textiles Ltd", "AABCD1234E")
     create_bidder_experience_pdf("B001", "Alpha Textiles Ltd", "5")
     create_bidder_turnover_pdf("B001", "Alpha Textiles Ltd", "78.5")
+    create_bidder_certification_pdf("B001", "Alpha Textiles Ltd", "ISO 9001:2015", "QMS-2024-12345", "2024")
 
     # Create bidder 2 - NOT_ELIGIBLE (expired GST)
     create_bidder_gst_pdf("B002", "Beta Garments Pvt Ltd", "29AAECB1234A1Z3", "Expired")
     create_bidder_pan_pdf("B002", "Beta Garments Pvt Ltd", "AABCE5678F")
     create_bidder_experience_pdf("B002", "Beta Garments Pvt Ltd", "4")
     create_bidder_turnover_pdf("B002", "Beta Garments Pvt Ltd", "45")
+    create_bidder_certification_pdf("B002", "Beta Garments Pvt Ltd", "ISO 9001:2015", "QMS-2023-98765", "2023")
 
     # Create bidder 3 - NEEDS_REVIEW (ambiguous dates in experience)
     create_bidder_gst_pdf("B003", "Gamma Industries", "07AAACG5678A1Z9", "Active")
     create_bidder_pan_pdf("B003", "Gamma Industries", "AABCF9012G")
     create_bidder_experience_pdf("B003", "Gamma Industries", "3")  # Ambiguous
     create_bidder_turnover_pdf("B003", "Gamma Industries", "52")
+    create_bidder_certification_pdf("B003", "Gamma Industries", "ISO 14001:2015", "EMS-2024-54321", "2024")
 
     print("\nDone! Test data created in backend/test_data/")

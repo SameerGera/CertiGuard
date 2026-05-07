@@ -50,6 +50,10 @@ output/
 *.xlsx
 *.json
 
+# Exception for test data PDFs
+!backend/test_data/**/*.pdf
+!frontend/public/test_data/**/*.pdf
+
 # Logs
 *.log
 

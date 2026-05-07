@@ -14,6 +14,25 @@ export interface TenderSummary {
   submission_deadline?: string
 }
 
+export interface TenderCriteria {
+  id: string
+  label: string
+  type: string
+  nature: string
+  threshold?: number | string
+  unit?: string
+}
+
+export interface TenderDetail {
+  tender_id: string
+  tender_name: string
+  submission_deadline: string
+  status: string
+  bidder_count: number
+  criteria: TenderCriteria[]
+  criteria_extracted: boolean
+}
+
 interface TendersResponse {
   tenders: TenderSummary[]
 }
@@ -21,6 +40,11 @@ interface TendersResponse {
 export async function getTenders(): Promise<TenderSummary[]> {
   const { data } = await api.get<TendersResponse>('/tenders')
   return data.tenders
+}
+
+export async function getTenderDetail(tenderId: string): Promise<TenderDetail> {
+  const { data } = await api.get<TenderDetail>(`/tenders/${tenderId}`)
+  return data
 }
 
 export async function getReviewQueue(tenderId: string): Promise<VerdictOutput> {

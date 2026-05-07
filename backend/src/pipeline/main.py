@@ -15,6 +15,7 @@ from src.verification.rule_engine import RuleEngine, ValidationResult
 from src.verification.identity_binding import IdentityBinder
 from src.verification.temporal_validity import TemporalValidator
 from src.verdict.yellow_flag import YellowFlagGenerator
+from src.extraction.entity_extractor import EntityExtractor as EnhancedEntityExtractor
 
 
 @dataclass
@@ -132,7 +133,7 @@ class CertiGuardPipeline:
     def __init__(self, config: PipelineConfig):
         self.config = config
         self.ocr = OCRProcessor()
-        self.entity_extractor = EntityExtractor()
+        self.entity_extractor = EnhancedEntityExtractor()
         self.rule_engine = RuleEngine()
         self.identity_binder = IdentityBinder()
         self.temporal_validator = TemporalValidator()
@@ -277,10 +278,19 @@ class CertiGuardPipeline:
     def _load_tender_criteria(self) -> Dict[str, Any]:
         """Load tender criteria - either from file or use defaults."""
         tender_file = os.path.join(self.config.tender_path)
+        
+        # Check if we have a real tender PDF to parse
         if os.path.exists(tender_file):
-            # Try to extract criteria from tender PDF
-            text = self.ocr.extract_text(tender_file)
-            # For now, use default criteria based on tender ID
+            try:
+                text = self.ocr.extract_text(tender_file)
+                if text:
+                    parsed_criteria = self._parse_tender_criteria(text)
+                    if parsed_criteria:
+                        return parsed_criteria
+            except Exception as e:
+                print(f"[TenderParser] Failed to parse tender: {e}")
+        
+        # Fallback to defaults
         return {
             'name': 'CRPF Uniform Supply 2026',
             'deadline': '2026-06-15',
@@ -289,6 +299,89 @@ class CertiGuardPipeline:
                 {'id': 'C002', 'label': 'Minimum 3 Years Experience', 'type': 'EXPERIENCE', 'nature': 'MANDATORY'},
                 {'id': 'C003', 'label': 'Annual Turnover above 50L', 'type': 'FINANCIAL', 'nature': 'DESIRABLE'},
             ]
+        }
+
+    def _parse_tender_criteria(self, text: str) -> Dict[str, Any]:
+        """Parse eligibility criteria from tender document text."""
+        criteria = []
+        criterion_id = 1
+        
+        # Extract tender name
+        name_match = re.search(r'Tender[:\s]+(.+?)(?:\n|$)', text, re.IGNORECASE)
+        name = name_match.group(1).strip() if name_match else "Tender Document"
+        
+        # Extract deadline
+        deadline_match = re.search(r'(?:submission\s+)?deadline[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})', text, re.IGNORECASE)
+        deadline = deadline_match.group(1) if deadline_match else ""
+        
+        # Patterns for different criteria types
+        patterns = {
+            'FINANCIAL': [
+                (r'turnover[:\s]+(?:₹|Rs\.?)\s*(\d+(?:\.\d+)?)\s*(Lakh|Lakhs?|L|l|Crore|Cr|cr|Million|M)', 'Annual Turnover', 'MANDATORY'),
+                (r'minimum\s+turnover[:\s]+(?:₹|Rs\.?)\s*(\d+(?:\.\d+)?)\s*(Lakh|Lakhs?|L|l|Crore|Cr|cr)', 'Minimum Turnover', 'MANDATORY'),
+                (r'annual\s+turnover[:\s]+(?:₹|Rs\.?)\s*(\d+(?:\.\d+)?)\s*(Lakh|Lakhs?|L|l|Crore|Cr|cr)', 'Annual Turnover', 'DESIRABLE'),
+            ],
+            'EXPERIENCE': [
+                (r'(\d+)\s+(?:years?|yrs?)\s+(?:of\s+)?experience', 'Years of Experience', 'MANDATORY'),
+                (r'minimum\s+(\d+)\s+(?:years?|yrs?)\s+(?:of\s+)?experience', 'Minimum Experience', 'MANDATORY'),
+                (r'experience[:\s]+(\d+)\s+(?:years?|yrs?)', 'Experience', 'MANDATORY'),
+            ],
+            'CERTIFICATION': [
+                (r'GST(?:IN)?\s+registration', 'Valid GST Registration', 'MANDATORY'),
+                (r'GST\s+Certificate', 'GST Certificate', 'MANDATORY'),
+                (r'ISO\s+(\d+)(?::\d+)?', 'ISO Certification', 'MANDATORY'),
+                (r'PAN\s+(?:Card)?', 'Valid PAN', 'MANDATORY'),
+            ]
+        }
+        
+        # Find financial criteria
+        for pattern, label, nature in patterns['FINANCIAL']:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                value = match.group(1) if match.lastindex >= 1 else ""
+                unit = match.group(2) if match.lastindex >= 2 else ""
+                criteria.append({
+                    'id': f'C{str(criterion_id).zfill(3)}',
+                    'label': f'{label} above {value} {unit}' if value else label,
+                    'type': 'FINANCIAL',
+                    'nature': nature,
+                    'threshold': value,
+                    'unit': unit
+                })
+                criterion_id += 1
+        
+        # Find experience criteria
+        for pattern, label, nature in patterns['EXPERIENCE']:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                years = match.group(1) if match.lastindex >= 1 else ""
+                criteria.append({
+                    'id': f'C{str(criterion_id).zfill(3)}',
+                    'label': f'Minimum {years} Years Experience',
+                    'type': 'EXPERIENCE',
+                    'nature': nature,
+                    'threshold': int(years) if years else 0
+                })
+                criterion_id += 1
+        
+        # Find certification criteria
+        for pattern, label, nature in patterns['CERTIFICATION']:
+            if re.search(pattern, text, re.IGNORECASE):
+                criteria.append({
+                    'id': f'C{str(criterion_id).zfill(3)}',
+                    'label': label,
+                    'type': 'CERTIFICATION',
+                    'nature': nature
+                })
+                criterion_id += 1
+        
+        if not criteria:
+            return None
+        
+        return {
+            'name': name,
+            'deadline': deadline,
+            'criteria': criteria
         }
 
     def _extract_bidder_name(self, bidder_dir: Path) -> str:
@@ -312,9 +405,26 @@ class CertiGuardPipeline:
                     return match.group(1).strip()
         return "Unknown Bidder"
 
+    def _validate_all_entities(self, entities: List[ExtractedEntity]) -> Dict[str, Dict]:
+        """Validate all extracted entities."""
+        validations = {}
+        
+        for entity in entities:
+            is_valid, message = self.entity_extractor.validate_entity(entity)
+            validations[entity.entity_type] = {
+                'is_valid': is_valid,
+                'message': message,
+                'value': entity.value
+            }
+        
+        return validations
+
     def _verify_bidder(self, bidder_id: str, entities: List[ExtractedEntity],
                        tender_criteria: Dict, ocr_text: str) -> List[Dict]:
         """Verify bidder against criteria."""
+        
+        entity_validations = self._validate_all_entities(entities)
+        
         results = []
 
         for criterion in tender_criteria.get('criteria', []):
@@ -344,12 +454,21 @@ class CertiGuardPipeline:
                         'detail': result.message,
                         'confidence': result.confidence if hasattr(result, 'confidence') else 0.9
                     })
+                    
+                    gst_validation = entity_validations.get('gstin', {})
+                    if gst_validation:
+                        checks.append({
+                            'check_name': 'Entity Validation',
+                            'passed': gst_validation.get('is_valid', True),
+                            'detail': gst_validation.get('message', 'Valid'),
+                            'confidence': 0.9
+                        })
+                    
                     if not result.passed:
                         verdict = 'NOT_ELIGIBLE'
                         confidence = 0.9
                         reason = result.message
 
-                    # Check for "Expired" in text
                     if 'expired' in ocr_text.lower() or 'expired' in gst.value.lower():
                         verdict = 'NOT_ELIGIBLE'
                         confidence = 0.95
@@ -394,11 +513,19 @@ class CertiGuardPipeline:
                         'detail': f'{years} years verified',
                         'confidence': confidence
                     })
+                    
+                    exp_validation = entity_validations.get('experience_years')
+                    if exp_validation:
+                        checks.append({
+                            'check_name': 'Entity Validation',
+                            'passed': exp_validation.get('is_valid', True),
+                            'detail': exp_validation.get('message', 'Valid'),
+                            'confidence': 0.85
+                        })
 
             elif criterion_id == 'C003':  # Turnover
                 turnover_entities = [e for e in entities if e.entity_type == 'turnover']
                 if not turnover_entities:
-                    # Not found - don't fail, just not eligible for desirable
                     verdict = 'ELIGIBLE'
                     confidence = 0.6
                     reason = 'No turnover documents found - optional criterion'
@@ -409,28 +536,64 @@ class CertiGuardPipeline:
                         'confidence': 0.6
                     })
                 else:
-                    amount = int(turnover_entities[0].normalized_value or 0)
-                    threshold = 50 * 100000  # 50 Lakhs
-                    if amount >= threshold:
-                        reason = f'Turnover verified: Rs. {amount/100000:.1f} Lakhs'
-                        confidence = 0.85
-                    else:
+                    try:
+                        amount = int(turnover_entities[0].normalized_value.replace(",", "") or 0)
+                    except (AttributeError, ValueError):
+                        amount = 0
+                    
+                    if amount == 0:
                         verdict = 'NEEDS_REVIEW'
-                        confidence = 0.6
-                        reason = f'Turnover Rs. {amount/100000:.1f}L is below 50L threshold'
+                        confidence = 0.5
+                        reason = 'Turnover value not properly extracted'
                         yellow_flags = [{
-                            'trigger_type': 'BELOW_THRESHOLD',
-                            'reason': f'Turnover {amount/100000:.1f}L below 50L threshold',
+                            'trigger_type': 'EXTRACTION_FAILED',
+                            'reason': 'Could not extract turnover amount from documents',
                             'affected_entity': 'turnover',
-                            'confidence_delta': -0.25
+                            'confidence_delta': -0.3
                         }]
-
-                    checks.append({
-                        'check_name': 'Turnover Validation',
-                        'passed': verdict != 'NOT_ELIGIBLE',
-                        'detail': reason,
-                        'confidence': confidence
-                    })
+                        checks.append({
+                            'check_name': 'Turnover Validation',
+                            'passed': False,
+                            'detail': 'Extraction failed - requires manual review',
+                            'confidence': 0.5
+                        })
+                    else:
+                        threshold = 50 * 100000
+                        if amount >= threshold:
+                            reason = f'Turnover verified: Rs. {amount/100000:.1f} Lakhs'
+                            confidence = 0.85
+                            checks.append({
+                                'check_name': 'Turnover Validation',
+                                'passed': True,
+                                'detail': reason,
+                                'confidence': confidence
+                            })
+                        else:
+                            verdict = 'NEEDS_REVIEW'
+                            confidence = 0.6
+                            reason = f'Turnover Rs. {amount/100000:.1f}L below 50L threshold'
+                            yellow_flags = [{
+                                'trigger_type': 'BELOW_THRESHOLD',
+                                'reason': f'Turnover Rs. {amount/100000:.1f}L below 50L threshold',
+                                'affected_entity': 'turnover',
+                                'confidence_delta': -0.25
+                            }]
+                            checks.append({
+                                'check_name': 'Turnover Validation',
+                                'passed': False,
+                                'detail': reason,
+                                'confidence': confidence
+                            })
+                    
+                    if turnover_entities:
+                        turnover_validation = entity_validations.get('turnover')
+                        if turnover_validation:
+                            checks.append({
+                                'check_name': 'Entity Validation',
+                                'passed': turnover_validation.get('is_valid', True),
+                                'detail': turnover_validation.get('message', 'Valid'),
+                                'confidence': 0.85
+                            })
 
             # Default verdict for missing critical info
             if verdict == 'ELIGIBLE' and not checks:

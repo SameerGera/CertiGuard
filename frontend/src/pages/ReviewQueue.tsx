@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import type { VerdictOutput } from '../types/api'
-import { getReviewQueue } from '../hooks/useApi'
+import { getReviewQueue, getTenderDetail, type TenderDetail, type TenderCriteria } from '../hooks/useApi'
 import BidderCard from '../components/BidderCard'
 import YellowFlagBadge from '../components/YellowFlagBadge'
 
@@ -13,6 +13,7 @@ export default function ReviewQueue({ tenderId }: ReviewQueueProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const [data, setData] = useState<VerdictOutput | null>(null)
+  const [tenderDetail, setTenderDetail] = useState<TenderDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'ALL' | 'NEEDS_REVIEW' | 'ELIGIBLE' | 'NOT_ELIGIBLE'>('ALL')
   const [search, setSearch] = useState('')
@@ -24,11 +25,19 @@ export default function ReviewQueue({ tenderId }: ReviewQueueProps) {
       return
     }
     setLoading(true)
-    getReviewQueue(tenderId)
-      .then(setData)
+    
+    // Fetch both tender detail and review queue
+    Promise.all([
+      getTenderDetail(tenderId),
+      getReviewQueue(tenderId)
+    ])
+      .then(([detail, queue]) => {
+        setTenderDetail(detail)
+        setData(queue)
+      })
       .catch(err => {
-        console.error('Failed to fetch review queue:', err)
-        setData(null)
+        console.error('Failed to fetch data:', err)
+        getReviewQueue(tenderId).then(setData).catch(console.error)
       })
       .finally(() => setLoading(false))
   }, [tenderId, refreshKey])
@@ -65,6 +74,31 @@ export default function ReviewQueue({ tenderId }: ReviewQueueProps) {
         <h2 className="text-2xl font-bold text-slate-800">Review Queue</h2>
         <p className="text-slate-500">{data?.tender_name}</p>
       </div>
+
+      {/* Tender Criteria Section */}
+      {tenderDetail?.criteria && tenderDetail.criteria.length > 0 && (
+        <div className="bg-blue-50 rounded-xl border border-blue-200 p-4">
+          <h3 className="font-semibold text-blue-800 mb-3">Tender Eligibility Criteria</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {tenderDetail.criteria.map((criterion) => (
+              <div key={criterion.id} className="bg-white rounded-lg p-3 border border-blue-100">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-slate-500">{criterion.id}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${
+                    criterion.nature === 'MANDATORY' 
+                      ? 'bg-red-100 text-red-700' 
+                      : 'bg-green-100 text-green-700'
+                  }`}>
+                    {criterion.nature}
+                  </span>
+                </div>
+                <p className="text-sm font-medium text-slate-800">{criterion.label}</p>
+                <span className="text-xs text-slate-500">{criterion.type}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-4 items-center">
         <input
