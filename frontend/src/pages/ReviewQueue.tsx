@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import type { VerdictOutput } from '../types/api'
-import { getReviewQueue, getTenderDetail, type TenderDetail, type TenderCriteria } from '../hooks/useApi'
+import { getReviewQueue, getTenderDetail, type TenderDetail } from '../hooks/useApi'
 import BidderCard from '../components/BidderCard'
 import YellowFlagBadge from '../components/YellowFlagBadge'
 

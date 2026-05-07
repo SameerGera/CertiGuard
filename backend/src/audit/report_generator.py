@@ -50,7 +50,29 @@ class ReportGenerator:
             story.append(Paragraph(f"CertiGuard Evaluation Report", styles["Title"]))
             story.append(Spacer(1, 12))
             story.append(Paragraph(f"Tender: {tender_id}", styles["Normal"]))
-            story.append(Spacer(1, 12))
+            story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles["Normal"]))
+            story.append(Spacer(1, 24))
+
+            summary_data = [["Bidder", "Verdict", "Confidence"]]
+            for bidder in bidders:
+                bidder_name = bidder.get("bidder_name", "Unknown")
+                verdict = bidder.get("overall_verdict", "NEEDS_REVIEW")
+                confidence = bidder.get("overall_confidence", 0.0)
+                summary_data.append([bidder_name, verdict, f"{confidence:.2f}"])
+
+            t = Table(summary_data)
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            story.append(t)
+            story.append(Spacer(1, 24))
 
             for bidder in bidders:
                 bidder_name = bidder.get("bidder_name", "Unknown")
@@ -58,13 +80,22 @@ class ReportGenerator:
                 confidence = bidder.get("overall_confidence", 0.0)
 
                 story.append(Paragraph(f"Bidder: {bidder_name}", styles["Heading2"]))
-                story.append(Paragraph(f"Verdict: {verdict} (Confidence: {confidence:.2f})", styles["Normal"]))
-                story.append(Spacer(1, 12))
+                story.append(Paragraph(f"Verdict: {verdict} | Confidence: {confidence:.2f}", styles["Normal"]))
+                story.append(Spacer(1, 6))
 
-                for crit in bidder.get("criteria_results", []):
-                    story.append(Paragraph(f"  {crit.get('criterion_id', '')}: {crit.get('verdict', '')}", styles["Normal"]))
+                for crit in bidder.get("criterion_results", []):
+                    crit_id = crit.get("criterion_id", "")
+                    crit_label = crit.get("criterion_label", "")
+                    crit_verdict = crit.get("verdict", "")
+                    reason = crit.get("reason", "")
+                    
+                    story.append(Paragraph(f"  {crit_id} - {crit_label}: {crit_verdict}", styles["Normal"]))
+                    story.append(Paragraph(f"    Reason: {reason}", styles["Normal"]))
+                    
+                    for flag in crit.get("yellow_flags", []):
+                        story.append(Paragraph(f"    ⚠ {flag.get('trigger_type', '')}: {flag.get('reason', '')}", styles["Normal"]))
 
-                story.append(Spacer(1, 24))
+                story.append(Spacer(1, 18))
 
             doc.build(story)
             return True

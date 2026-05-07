@@ -329,19 +329,74 @@ def generate_report(tender_id: str = Query(...), format: str = Query("pdf")):
 
 @app.get("/api/v1/report/download/{format}")
 def download_report(format: str, tender_id: str = Query(...)):
-    if tender_id in PROCESSED_RESULTS:
-        result = PROCESSED_RESULTS[tender_id]
+    if tender_id not in PROCESSED_RESULTS:
+        return {"error": "Tender not processed", "tender_id": tender_id}
+
+    result = PROCESSED_RESULTS[tender_id]
+    
+    output_dir = Path("output")
+    output_dir.mkdir(exist_ok=True)
+    
+    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)) + "/backend")
+    from src.audit.exporters import exporters
+    from src.audit.report_generator import report_generator
+    
+    tender_id_safe = tender_id.replace("/", "_").replace("\\", "_")
+    
+    if format == "json":
+        output_path = str(output_dir / f"{tender_id_safe}_report.json")
+        success = exporters.export_json(result, output_path)
+    elif format == "xlsx":
+        output_path = str(output_dir / f"{tender_id_safe}_report.xlsx")
+        success = exporters.export_xlsx(result, output_path)
+    elif format == "pdf":
+        output_path = str(output_dir / f"{tender_id_safe}_report.pdf")
+        success = report_generator.generate_pdf(tender_id, result.get("bidders", []), output_path)
+    else:
+        return {"error": f"Unsupported format: {format}"}
+    
+    if success and Path(output_path).exists():
         return {
             "format": format,
             "tender_id": tender_id,
-            "record_count": len(result.get("bidders", [])),
-            "download_url": f"/api/v1/report/download/{format}?tender_id={tender_id}"
+            "download_url": f"/api/v1/report/file/{tender_id_safe}/{format}",
+            "file_path": output_path
         }
+    
+    return {"error": f"Failed to generate {format} report"}
 
-    return build_mock_report(tender_id, format)
 
-
-# ============ Mock Data (Fallback) ============
+@app.get("/api/v1/report/file/{tender_id}/{format}")
+def serve_report_file(tender_id: str, format: str):
+    """Serve the generated report file."""
+    output_dir = Path("output")
+    filename_map = {
+        "json": f"{tender_id}_report.json",
+        "xlsx": f"{tender_id}_report.xlsx",
+        "pdf": f"{tender_id}_report.pdf"
+    }
+    
+    filename = filename_map.get(format)
+    if not filename:
+        return {"error": f"Unknown format: {format}"}
+    
+    file_path = output_dir / filename
+    
+    if not file_path.exists():
+        return {"error": "File not found. Generate report first."}
+    
+    media_map = {
+        "json": "application/json",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "pdf": "application/pdf"
+    }
+    
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=str(file_path),
+        media_type=media_map.get(format, "application/octet-stream"),
+        filename=f"certiguard_{tender_id}_report.{format}"
+    )
 
 def build_mock_verdict(tender_id: str) -> dict:
     """Different mock data for each tender."""

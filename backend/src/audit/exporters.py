@@ -21,22 +21,49 @@ class Exporters:
             import openpyxl
             wb = openpyxl.Workbook()
             ws = wb.active
-            ws.title = "Results"
+            ws.title = "Summary"
 
-            ws.append(["Bidder ID", "Bidder Name", "Criterion", "Verdict", "Confidence", "Reason"])
+            ws.append(["Bidder ID", "Bidder Name", "Overall Verdict", "Confidence", "Verdict Reason"])
 
             for bidder in data.get("bidders", []):
-                bid = bidder.get("bidder_id", "")
-                name = bidder.get("bidder_name", "")
-                for crit in bidder.get("criteria_results", []):
+                ws.append([
+                    bidder.get("bidder_id", ""),
+                    bidder.get("bidder_name", ""),
+                    bidder.get("overall_verdict", ""),
+                    bidder.get("overall_confidence", 0.0),
+                    bidder.get("verdict_reason", "")
+                ])
+
+            ws.append([])
+            ws.append(["Criterion Results"])
+            ws.append(["Bidder", "Criterion ID", "Criterion Label", "Verdict", "AI Confidence", "Reason"])
+
+            for bidder in data.get("bidders", []):
+                bid = bidder.get("bidder_name", bidder.get("bidder_id", ""))
+                for crit in bidder.get("criterion_results", []):
                     ws.append([
                         bid,
-                        name,
                         crit.get("criterion_id", ""),
+                        crit.get("criterion_label", ""),
                         crit.get("verdict", ""),
-                        crit.get("confidence", 0.0),
+                        crit.get("ai_confidence", 0.0),
                         crit.get("reason", "")
                     ])
+
+            ws.append([])
+            ws.append(["Yellow Flags"])
+            ws.append(["Bidder", "Criterion", "Trigger Type", "Reason"])
+
+            for bidder in data.get("bidders", []):
+                bid = bidder.get("bidder_name", bidder.get("bidder_id", ""))
+                for crit in bidder.get("criterion_results", []):
+                    for flag in crit.get("yellow_flags", []):
+                        ws.append([
+                            bid,
+                            crit.get("criterion_id", ""),
+                            flag.get("trigger_type", ""),
+                            flag.get("reason", "")
+                        ])
 
             wb.save(output_path)
             return True
